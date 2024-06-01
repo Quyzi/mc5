@@ -1,10 +1,7 @@
-use std::fmt::Display;
 use serde::Deserialize;
 use serde::Serialize;
-use sled::IVec;
-
+use std::fmt::Display;
 use crate::errors::McError;
-
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct Label {
@@ -21,8 +18,8 @@ impl Display for Label {
 impl Label {
     pub fn new(k: &str, v: &str) -> Self {
         Self {
-            key: format!("{k}"),
-            value: format!("{v}")
+            key: k.to_string(),
+            value: v.to_string(),
         }
     }
 
@@ -34,15 +31,27 @@ impl Label {
         &self.value
     }
 
-    pub(crate) fn as_kev_key(&self) -> Result<IVec, McError> {
-        Ok(IVec::from(format!("{}={}", self.key(), self.value()).as_bytes()))
+    pub fn swap_key_value(&mut self) {
+        std::mem::swap(&mut self.key, &mut self.value)
     }
 
-    pub(crate) fn as_vek_key(&self) -> Result<IVec, McError> {
-        Ok(IVec::from(format!("{}={}", self.value(), self.key()).as_bytes()))
+    pub fn as_bytes(&self) -> Vec<u8> {
+        format!("{}={}", self.key(), self.value()).as_bytes().to_vec()
+    }
+    
+    pub fn as_bytes_rev(&self) -> Vec<u8> {
+        format!("{}={}", self.value(), self.key()).as_bytes().to_vec()
+    }
+
+    pub fn from_str(s: &[u8]) -> Result<Self, McError> {
+        let s = std::str::from_utf8(s)?;
+        if let Some((lhs, rhs)) = s.split_once("=") {
+            Ok(Self::new(lhs, rhs))
+        } else {
+            Err(McError::Etc(format!("invalid label {s}")))
+        }
     }
 }
-
 
 #[macro_export]
 macro_rules! mclabel {

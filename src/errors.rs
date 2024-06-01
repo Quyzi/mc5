@@ -1,12 +1,10 @@
-use std::time::SystemTimeError;
 use flexbuffers::{DeserializationError, ReaderError, SerializationError};
 use sled::transaction::{TransactionError, UnabortableTransactionError};
+use std::{str::Utf8Error, time::SystemTimeError};
 use thiserror::Error;
-
 
 #[derive(Error, Debug)]
 pub enum McError {
-
     #[error("Time travel is illegal: {0}")]
     Time(#[from] SystemTimeError),
 
@@ -18,7 +16,7 @@ pub enum McError {
 
     #[error("Flexbuffer read error: {0}")]
     FlexRead(#[from] ReaderError),
-    
+
     #[error("Formatting error: {0}")]
     Format(#[from] std::fmt::Error),
 
@@ -30,5 +28,10 @@ pub enum McError {
 
     #[error("Unabortable sled transaction error: {0}")]
     SledUnabortable(#[from] UnabortableTransactionError),
-}
 
+    #[error("UTF-8 format error: {0}")]
+    Utf(#[from] Utf8Error),
+
+    #[error("Undefined error: {0}")]
+    Etc(String),
+}
