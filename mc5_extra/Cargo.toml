@@ -1,0 +1,21 @@
+[package]
+name = "mc5_extra"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+flexbuffers = "2.0.0"
+futures = "0.3"
+mc5_core = { path = "../mc5_core" }
+serde = { version = "1.0.201", features = ["derive"] }
+sled = "0.34.7"
+tarpc = { version = "0.34", features = ["full"] }
+thiserror = "1.0.60"
+tokio = { version = "1.0", features = ["macros"] }
+tracing = "0.1"
+uuid = { version = "1.8.0", features = ["v6", "rng"] }
+
+[dev-dependencies]
+tracing-subscriber = { version = "0.3", features = ["std", "env-filter"] }

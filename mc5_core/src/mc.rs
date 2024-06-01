@@ -2,6 +2,7 @@ use crate::{bucket::McBucket, errors::McError};
 use flexbuffers::FlexbufferSerializer;
 use serde::{de::DeserializeOwned, Serialize};
 use sled::{Config, IVec};
+use tracing::info;
 use std::cmp::min;
 use tracing::debug;
 use tracing::instrument;
@@ -60,6 +61,29 @@ impl Mc {
         let this = McBucket::new(self, name)?;
         debug!("Opened bucket {name}");
         Ok(this)
+    }
+
+    /// List buckets
+    #[instrument(skip(self))]
+    pub fn list_buckets(&self) -> Result<Vec<String>, McError> {
+        let mut results = vec![];
+        for raw_name in self.db.tree_names() {
+            let name = std::str::from_utf8(&raw_name)?;
+            results.push(format!("{name}"));
+        }
+        results = results
+            .into_iter()
+            .fold(vec![], |mut acc, r| {
+                if r.contains("::") {
+                    if let Some((name, _suffix)) = r.split_once("::") {
+                        acc.push(format!("{name}"));
+                    }
+                }
+                acc
+            });
+        results.sort();
+        results.dedup();
+        Ok(results)
     }
 
     /// Serialize a thing to be stored as a document
@@ -165,6 +189,9 @@ mod tests {
 
         let deleted = bucket.delete::<Testobj>(ids[0])?.expect("oopsie");
         assert_eq!(object, deleted);
+
+        let list = db.list_buckets()?;
+
 
         Ok(())
     }

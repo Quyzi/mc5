@@ -1,0 +1,17 @@
+[package]
+name = "mc5_core"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+flexbuffers = "2.0.0"
+serde = { version = "1.0.201", features = ["derive"] }
+sled = "0.34.7"
+thiserror = "1.0.60"
+tracing = "0.1"
+uuid = { version = "1.8.0", features = ["v6", "rng"] }
+
+[dev-dependencies]
+tracing-subscriber = { version = "0.3", features = ["std", "env-filter"] }
