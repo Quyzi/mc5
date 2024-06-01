@@ -68,18 +68,16 @@ impl Mc {
         let mut results = vec![];
         for raw_name in self.db.tree_names() {
             let name = std::str::from_utf8(&raw_name)?;
-            results.push(format!("{name}"));
+            results.push(name.to_string());
         }
-        results = results
-            .into_iter()
-            .fold(vec![], |mut acc, r| {
-                if r.contains("::") {
-                    if let Some((name, _suffix)) = r.split_once("::") {
-                        acc.push(format!("{name}"));
-                    }
+        results = results.into_iter().fold(vec![], |mut acc, r| {
+            if r.contains("::") {
+                if let Some((name, _suffix)) = r.split_once("::") {
+                    acc.push(name.to_string());
                 }
-                acc
-            });
+            }
+            acc
+        });
         results.sort();
         results.dedup();
         Ok(results)
@@ -87,7 +85,7 @@ impl Mc {
 
     #[instrument(skip(self))]
     pub fn drop_bucket(&self, name: &str) -> Result<(), McError> {
-        let b = McBucket::new(&self, name)?;
+        let b = McBucket::new(self, name)?;
         b.drop_bucket()?;
         Ok(())
     }
@@ -122,9 +120,9 @@ mod tests {
     use crate::label::Label;
     use crate::{mclabel, mclabels};
     use serde::Deserialize;
-    use tracing_subscriber::EnvFilter;
     use std::time::SystemTime;
     use std::time::UNIX_EPOCH;
+    use tracing_subscriber::EnvFilter;
 
     #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
     struct Testobj {
@@ -149,10 +147,10 @@ mod tests {
 
     fn init_tracing() {
         tracing_subscriber::fmt()
-        .pretty()
-        .with_ansi(true)
-        .with_env_filter(EnvFilter::from_default_env())
-        .init();
+            .pretty()
+            .with_ansi(true)
+            .with_env_filter(EnvFilter::from_default_env())
+            .init();
     }
 
     #[test]
@@ -177,12 +175,12 @@ mod tests {
         let id = bucket.insert(&object, labels)?;
         println!("{id}");
 
-        let ids = bucket.search_inclusive(mclabels!("object_type" => "test", "okay" => "maybe?"))?;
+        let ids =
+            bucket.search_inclusive(mclabels!("object_type" => "test", "okay" => "maybe?"))?;
         println!("{ids:?}");
 
         let got = bucket.get::<Testobj>(ids[0])?.expect("Oops");
         assert_eq!(object, got);
-
 
         let labels = bucket.get_document_labels(id)?.expect("oops");
         println!("{labels:?}");

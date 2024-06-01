@@ -1,9 +1,9 @@
-use std::cell::RefCell;
 use crate::{errors::McError, label::Label, mc::Mc};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-use sled::Transactional;
 use sled::transaction::UnabortableTransactionError;
+use sled::Transactional;
+use std::cell::RefCell;
 use tracing::{error, info, instrument, warn};
 use uuid::Uuid;
 
@@ -64,8 +64,8 @@ impl McBucket {
     /// Get many documents by id
     #[instrument(skip(self))]
     pub fn get_many<T>(&self, ids: Vec<Uuid>) -> Result<Vec<(Uuid, Option<T>)>, McError>
-    where 
-        T: DeserializeOwned
+    where
+        T: DeserializeOwned,
     {
         let mut results = vec![];
         for id in &ids {
@@ -82,15 +82,15 @@ impl McBucket {
                 let labels: Vec<Label> = Mc::de(thing)?;
                 info!("Found {} labels for document", labels.len());
                 Ok(Some(labels))
-            },
+            }
             Ok(None) => {
                 info!("Document not found or document has no labels");
                 Ok(None)
-            },
+            }
             Err(e) => {
                 error!("Error looking up document labels");
                 Err(e.into())
-            },
+            }
         }
     }
 
@@ -142,30 +142,43 @@ impl McBucket {
 
     /// Delete a document from the bucket
     #[instrument(skip(self))]
-    pub fn delete<T>(&self, id: Uuid) -> Result<Option<T>, McError> 
+    pub fn delete<T>(&self, id: Uuid) -> Result<Option<T>, McError>
     where
-        T: DeserializeOwned 
+        T: DeserializeOwned,
     {
         let output: RefCell<Option<T>> = RefCell::new(None);
         let idb = Mc::ser(id.as_u64_pair())?;
-        (&self.documents, &self.labels_kev, &self.labels_vek, &self.docs_labels).transaction(|(docs, kev, vek, labels)| {
-            info!("deleting document");
-            if let Some(raw_doc) = docs.remove(&idb)? {
-                let result: T = Mc::de(raw_doc).map_err(|e| UnabortableTransactionError::Storage(sled::Error::ReportableBug(e.to_string())))?;
-                *output.borrow_mut() = Some(result);
-            }
-            info!("deleting document labels");
-            if let Some(raw_labels) = labels.remove(&idb)? {
-                let labels: Vec<Label> = Mc::de(raw_labels)
-                    .map_err(|e| UnabortableTransactionError::Storage(sled::Error::ReportableBug(e.to_string())))?;
-                info!("downserting id from labels");
-                for label in labels {
-                    self.downsert_label(kev, &label.as_bytes(), id.as_u64_pair())?;
-                    self.downsert_label(vek, &label.as_bytes_rev(), id.as_u64_pair())?;
+        (
+            &self.documents,
+            &self.labels_kev,
+            &self.labels_vek,
+            &self.docs_labels,
+        )
+            .transaction(|(docs, kev, vek, labels)| {
+                info!("deleting document");
+                if let Some(raw_doc) = docs.remove(&idb)? {
+                    let result: T = Mc::de(raw_doc).map_err(|e| {
+                        UnabortableTransactionError::Storage(sled::Error::ReportableBug(
+                            e.to_string(),
+                        ))
+                    })?;
+                    *output.borrow_mut() = Some(result);
                 }
-            }
-            Ok(())
-        })?;
+                info!("deleting document labels");
+                if let Some(raw_labels) = labels.remove(&idb)? {
+                    let labels: Vec<Label> = Mc::de(raw_labels).map_err(|e| {
+                        UnabortableTransactionError::Storage(sled::Error::ReportableBug(
+                            e.to_string(),
+                        ))
+                    })?;
+                    info!("downserting id from labels");
+                    for label in labels {
+                        self.downsert_label(kev, &label.as_bytes(), id.as_u64_pair())?;
+                        self.downsert_label(vek, &label.as_bytes_rev(), id.as_u64_pair())?;
+                    }
+                }
+                Ok(())
+            })?;
         info!("transaction complete");
         Ok(RefCell::into_inner(output))
     }
@@ -174,23 +187,30 @@ impl McBucket {
     #[instrument(skip(self), ret)]
     pub fn search_inclusive(&self, labels: Vec<Label>) -> Result<Vec<Uuid>, McError> {
         let mut results = vec![];
-        
+
         let mut middle = vec![];
         for label in labels {
             match self.labels_kev.get(&label.as_bytes()) {
                 Ok(Some(thing)) => {
                     let ids: Vec<(u64, u64)> = Mc::de(thing)?;
-                    let ids: Vec<Uuid> = ids.into_iter().map(|id| Uuid::from_u64_pair(id.0, id.1)).collect();
-                    info!(label = format!("{label}"), "Found {} ids for label", ids.len());
+                    let ids: Vec<Uuid> = ids
+                        .into_iter()
+                        .map(|id| Uuid::from_u64_pair(id.0, id.1))
+                        .collect();
+                    info!(
+                        label = format!("{label}"),
+                        "Found {} ids for label",
+                        ids.len()
+                    );
                     results.extend(&ids);
                     middle.push(ids);
-                },
+                }
                 Ok(None) => {
                     info!(label = format!("{label}"), "Label does not exist");
-                },
+                }
                 Err(_e) => {
                     error!(label = format!("{label}"), "Error looking up label");
-                },
+                }
             }
         }
         results.sort();
@@ -208,10 +228,14 @@ impl McBucket {
     #[instrument(skip(self), ret)]
     pub fn label_name_search(&self, key: &str) -> Result<Vec<Label>, McError> {
         let mut results = vec![];
-        for result in self.labels_kev.scan_prefix(&format!("{key}")) {
+        for result in self.labels_kev.scan_prefix(key) {
             let (key, val) = result?;
-            info!(label = format!("{key:?}"), value = format!("{val:?}"), "Found label with prefix");
-            let label = Label::from_str(&key.to_vec())?;
+            info!(
+                label = format!("{key:?}"),
+                value = format!("{val:?}"),
+                "Found label with prefix"
+            );
+            let label = Label::from_bytes(&key)?;
             results.push(label);
         }
         Ok(results)
@@ -221,10 +245,14 @@ impl McBucket {
     #[instrument(skip(self), ret)]
     pub fn label_value_search(&self, value: &str) -> Result<Vec<Label>, McError> {
         let mut results = vec![];
-        for result in self.labels_vek.scan_prefix(&format!("{value}")) {
+        for result in self.labels_vek.scan_prefix(value) {
             let (key, val) = result?;
-            info!(label = format!("{key:?}"), value = format!("{val:?}"), "Found label with prefix");
-            let mut label = Label::from_str(&key.to_vec())?;
+            info!(
+                label = format!("{key:?}"),
+                value = format!("{val:?}"),
+                "Found label with prefix"
+            );
+            let mut label = Label::from_bytes(&key)?;
             label.swap_key_value();
             results.push(label);
         }
@@ -237,11 +265,13 @@ impl McBucket {
         match self.labels_kev.get(label.as_bytes())? {
             Some(raw_labels) => {
                 let ids: Vec<(u64, u64)> = Mc::de(raw_labels)?;
-                Ok(Some(ids.into_iter().map(|id| Uuid::from_u64_pair(id.0, id.1)).collect()))
-            },
-            None => {
-                Ok(None)
+                Ok(Some(
+                    ids.into_iter()
+                        .map(|id| Uuid::from_u64_pair(id.0, id.1))
+                        .collect(),
+                ))
             }
+            None => Ok(None),
         }
     }
 
@@ -249,28 +279,34 @@ impl McBucket {
     #[instrument(skip(self), ret)]
     pub fn add_document_labels(&self, id: Uuid, labels: Vec<Label>) -> Result<(), McError> {
         let idbytes = Mc::ser(id.as_u64_pair())?;
-        (&self.labels_kev, &self.labels_vek, &self.docs_labels)
-            .transaction(|(kev, vek, doc_labels)| {
+        (&self.labels_kev, &self.labels_vek, &self.docs_labels).transaction(
+            |(kev, vek, doc_labels)| {
                 // Update the docs_labels tree with the new labels
                 if let Some(raw_labels) = doc_labels.remove(&idbytes)? {
-                    let mut has_labels: Vec<Label> = Mc::de(raw_labels)
-                        .map_err(|e| UnabortableTransactionError::Storage(sled::Error::ReportableBug(e.to_string())))?;
+                    let mut has_labels: Vec<Label> = Mc::de(raw_labels).map_err(|e| {
+                        UnabortableTransactionError::Storage(sled::Error::ReportableBug(
+                            e.to_string(),
+                        ))
+                    })?;
                     has_labels.extend(labels.clone());
                     has_labels.sort();
                     has_labels.dedup();
                     let new = Mc::ser(has_labels).map_err(|e| {
-                        UnabortableTransactionError::Storage(sled::Error::ReportableBug(e.to_string()))
+                        UnabortableTransactionError::Storage(sled::Error::ReportableBug(
+                            e.to_string(),
+                        ))
                     })?;
                     doc_labels.insert(&idbytes, new)?;
                 }
 
                 // Upsert each new label
                 for label in &labels {
-                    self.upsert_label(&kev, &label.as_bytes(), id.as_u64_pair())?;
-                    self.upsert_label(&vek, &label.as_bytes_rev(), id.as_u64_pair())?;
+                    self.upsert_label(kev, &label.as_bytes(), id.as_u64_pair())?;
+                    self.upsert_label(vek, &label.as_bytes_rev(), id.as_u64_pair())?;
                 }
                 Ok(())
-            })?;
+            },
+        )?;
         Ok(())
     }
 
@@ -278,28 +314,34 @@ impl McBucket {
     #[instrument(skip(self), ret)]
     pub fn remove_document_labels(&self, id: Uuid, labels: Vec<Label>) -> Result<(), McError> {
         let idbytes = Mc::ser(id.as_u64_pair())?;
-        (&self.labels_kev, &self.labels_vek, &self.docs_labels)
-            .transaction(|(kev, vek, doc_labels)| {
+        (&self.labels_kev, &self.labels_vek, &self.docs_labels).transaction(
+            |(kev, vek, doc_labels)| {
                 // Update the docs_labels tree with the labels removed
                 if let Some(raw_labels) = doc_labels.remove(&idbytes)? {
-                    let mut has_labels: Vec<Label> = Mc::de(raw_labels)
-                        .map_err(|e| UnabortableTransactionError::Storage(sled::Error::ReportableBug(e.to_string())))?;
+                    let mut has_labels: Vec<Label> = Mc::de(raw_labels).map_err(|e| {
+                        UnabortableTransactionError::Storage(sled::Error::ReportableBug(
+                            e.to_string(),
+                        ))
+                    })?;
                     has_labels.retain(|l| !labels.contains(l));
                     has_labels.sort();
                     has_labels.dedup();
                     let new = Mc::ser(has_labels).map_err(|e| {
-                        UnabortableTransactionError::Storage(sled::Error::ReportableBug(e.to_string()))
+                        UnabortableTransactionError::Storage(sled::Error::ReportableBug(
+                            e.to_string(),
+                        ))
                     })?;
                     doc_labels.insert(&idbytes, new)?;
                 }
 
                 // Downsert each new label
                 for label in &labels {
-                    self.downsert_label(&kev, &label.as_bytes(), id.as_u64_pair())?;
-                    self.downsert_label(&vek, &label.as_bytes_rev(), id.as_u64_pair())?;
+                    self.downsert_label(kev, &label.as_bytes(), id.as_u64_pair())?;
+                    self.downsert_label(vek, &label.as_bytes_rev(), id.as_u64_pair())?;
                 }
                 Ok(())
-            })?;
+            },
+        )?;
         Ok(())
     }
 
@@ -346,41 +388,56 @@ impl McBucket {
 
     /// downsert an id from a label. This will remove the label if it is unused
     #[instrument(skip(self, t))]
-    fn downsert_label(&self, t: &sled::transaction::TransactionalTree, k: &[u8], id: (u64, u64)) -> Result<(), UnabortableTransactionError> {
+    fn downsert_label(
+        &self,
+        t: &sled::transaction::TransactionalTree,
+        k: &[u8],
+        id: (u64, u64),
+    ) -> Result<(), UnabortableTransactionError> {
         match t.get(k) {
             Ok(Some(raw_labels)) => {
                 info!("Found label");
-                let mut ids: Vec<(u64, u64)> = Mc::de(raw_labels)
-                    .map_err(|e| UnabortableTransactionError::Storage(sled::Error::ReportableBug(e.to_string())))?;
+                let mut ids: Vec<(u64, u64)> = Mc::de(raw_labels).map_err(|e| {
+                    UnabortableTransactionError::Storage(sled::Error::ReportableBug(e.to_string()))
+                })?;
                 if ids.len() == 1 {
                     info!("Label has only one item, deleting");
                     t.remove(k)?;
                 } else {
                     ids.retain(|i| i.0 != id.0 && i.1 != id.1);
-                    t.insert(k, Mc::ser(ids).map_err(|e| UnabortableTransactionError::Storage(sled::Error::ReportableBug(e.to_string())))?)?;
+                    t.insert(
+                        k,
+                        Mc::ser(ids).map_err(|e| {
+                            UnabortableTransactionError::Storage(sled::Error::ReportableBug(
+                                e.to_string(),
+                            ))
+                        })?,
+                    )?;
                 }
                 Ok(())
-            },
+            }
             Ok(None) => {
                 warn!("Label did not exist to downsert");
                 Ok(())
-            },
+            }
             Err(e) => {
                 error!("Label failed to downsert");
-                Err(UnabortableTransactionError::Storage(sled::Error::ReportableBug(e.to_string())))
-            },
+                Err(UnabortableTransactionError::Storage(
+                    sled::Error::ReportableBug(e.to_string()),
+                ))
+            }
         }
     }
 
     /// Drop this bucket, deleting all of its documents and labels.
-    /// This can't be undone. 
+    /// This can't be undone.
     #[instrument(skip(self))]
     pub fn drop_bucket(&self) -> Result<(), McError> {
         let name = &self.name;
-        self.parent.db.drop_tree(&format!("{name}::doc"))?;
-        self.parent.db.drop_tree(&format!("{name}::kev"))?;
-        self.parent.db.drop_tree(&format!("{name}::vek"))?;
-        self.parent.db.drop_tree(&format!("{name}::labels"))?;
+        self.parent.db.drop_tree(format!("{name}::doc"))?;
+        self.parent.db.drop_tree(format!("{name}::kev"))?;
+        self.parent.db.drop_tree(format!("{name}::vek"))?;
+        self.parent.db.drop_tree(format!("{name}::labels"))?;
         Ok(())
     }
 }

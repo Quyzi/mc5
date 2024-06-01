@@ -1,7 +1,7 @@
+use crate::errors::McError;
 use serde::Deserialize;
 use serde::Serialize;
 use std::fmt::Display;
-use crate::errors::McError;
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct Label {
@@ -36,16 +36,20 @@ impl Label {
     }
 
     pub fn as_bytes(&self) -> Vec<u8> {
-        format!("{}={}", self.key(), self.value()).as_bytes().to_vec()
-    }
-    
-    pub fn as_bytes_rev(&self) -> Vec<u8> {
-        format!("{}={}", self.value(), self.key()).as_bytes().to_vec()
+        format!("{}={}", self.key(), self.value())
+            .as_bytes()
+            .to_vec()
     }
 
-    pub fn from_str(s: &[u8]) -> Result<Self, McError> {
+    pub fn as_bytes_rev(&self) -> Vec<u8> {
+        format!("{}={}", self.value(), self.key())
+            .as_bytes()
+            .to_vec()
+    }
+
+    pub fn from_bytes(s: &[u8]) -> Result<Self, McError> {
         let s = std::str::from_utf8(s)?;
-        if let Some((lhs, rhs)) = s.split_once("=") {
+        if let Some((lhs, rhs)) = s.split_once('=') {
             Ok(Self::new(lhs, rhs))
         } else {
             Err(McError::Etc(format!("invalid label {s}")))
