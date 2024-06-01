@@ -2,7 +2,6 @@ use crate::{bucket::McBucket, errors::McError};
 use flexbuffers::FlexbufferSerializer;
 use serde::{de::DeserializeOwned, Serialize};
 use sled::{Config, IVec};
-use tracing::info;
 use std::cmp::min;
 use tracing::debug;
 use tracing::instrument;
@@ -84,6 +83,13 @@ impl Mc {
         results.sort();
         results.dedup();
         Ok(results)
+    }
+
+    #[instrument(skip(self))]
+    pub fn drop_bucket(&self, name: &str) -> Result<(), McError> {
+        let b = McBucket::new(&self, name)?;
+        b.drop_bucket()?;
+        Ok(())
     }
 
     /// Serialize a thing to be stored as a document
@@ -190,8 +196,8 @@ mod tests {
         let deleted = bucket.delete::<Testobj>(ids[0])?.expect("oopsie");
         assert_eq!(object, deleted);
 
-        let list = db.list_buckets()?;
-
+        let buckets = db.list_buckets()?;
+        println!("{buckets:?}");
 
         Ok(())
     }
