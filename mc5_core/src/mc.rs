@@ -83,6 +83,7 @@ impl Mc {
         Ok(results)
     }
 
+    /// Drop a bucket
     #[instrument(skip(self))]
     pub fn drop_bucket(&self, name: &str) -> Result<(), McError> {
         let b = McBucket::new(self, name)?;

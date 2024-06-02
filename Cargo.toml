@@ -1,5 +1,6 @@
 [workspace]
 resolver = "1"
 members = [
-    "mc5_core"
-, "mc5_extra"]
+    "mc5_core",
+#    "mc5_extra"
+]

@@ -6,9 +6,10 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+figment = { version = "0.10.19", features = ["yaml", "serde_yaml"] }
 flexbuffers = "2.0.0"
 serde = { version = "1.0.201", features = ["derive"] }
-sled = "0.34.7"
+sled = { version = "0.34.7", features = ["compression"] }
 thiserror = "1.0.60"
 tracing = "0.1"
 uuid = { version = "1.8.0", features = ["v6", "rng"] }
