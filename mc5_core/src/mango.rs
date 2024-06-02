@@ -1,7 +1,8 @@
+use crate::config::MangoChainsawConfig;
 use crate::{bucket::McBucket, errors::MangoChainsawError};
 use flexbuffers::FlexbufferSerializer;
 use serde::{de::DeserializeOwned, Serialize};
-use sled::{Config, IVec};
+use sled::IVec;
 use std::cmp::min;
 use tracing::debug;
 use tracing::instrument;
@@ -14,20 +15,10 @@ pub struct MangoChainsaw {
 
 impl MangoChainsaw {
     /// Create or open an existing Mc5 from a Config
-    #[cfg(not(test))]
     #[instrument]
-    pub fn new(config: Config) -> Result<Self, MangoChainsawError> {
+    pub fn new(config: MangoChainsawConfig) -> Result<Self, MangoChainsawError> {
         debug!("Opening db");
-        Ok(Self { db: config.open()? })
-    }
-
-    /// Create or open an existing Mc5 from a Config
-    #[cfg(test)]
-    #[instrument]
-    pub fn new(_config: Config) -> Result<Self, MangoChainsawError> {
-        let cfg = sled::Config::new().temporary(true);
-        debug!("Opening temporary db");
-        Ok(Self { db: cfg.open()? })
+        Ok(Self { db: config.to_sled_config().open()? })
     }
 
     /// Get a named tree from the sled backend
@@ -118,6 +109,7 @@ impl MangoChainsaw {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::MangoChainsawConfig;
     use crate::label::Label;
     use crate::{mclabel, mclabels};
     use serde::Deserialize;
@@ -157,8 +149,8 @@ mod tests {
     #[test]
     fn test_insert_get_scan_delete() -> Result<(), MangoChainsawError> {
         init_tracing();
-
-        let db = MangoChainsaw::new(Config::default())?;
+        let config = MangoChainsawConfig::load("mango_chainsaw.default.yaml", "integration_test")?;
+        let db = MangoChainsaw::new(config)?;
         let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_micros();
         let object = Testobj::new();
         let labels = mclabels!(

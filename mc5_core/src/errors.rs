@@ -5,6 +5,9 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum MangoChainsawError {
+    #[error("Config erro: {0}")]
+    Config(#[from] figment::Error),
+    
     #[error("Time travel is illegal: {0}")]
     Time(#[from] SystemTimeError),
 

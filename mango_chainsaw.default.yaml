@@ -1,0 +1,23 @@
+dev:
+  listen: 127.0.0.1:1420
+  temporary: true
+  data_path: mc5_data/
+  backend_mode: Fast
+  idgen_interval: 420069
+  compression_factor: 2
+
+prod:
+  listen: 0.0.0.0:1420
+  temporary: false
+  data_path: mc5_data/
+  backend_mode: Fast
+  idgen_interval: 420069
+  compression_factor: 3
+
+integration_test:
+  listen: 127.0.0.1:1420
+  temporary: true
+  data_path: ..\testdata
+  backend_mode: Fast
+  idgen_interval: 420069
+  compression_factor: 1
