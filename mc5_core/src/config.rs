@@ -1,6 +1,12 @@
-use std::{net::{Ipv4Addr, SocketAddr, SocketAddrV4}, path::{Path, PathBuf}};
-use figment::{providers::{Format, YamlExtended}, Figment, Metadata, Provider};
+use figment::{
+    providers::{Format, YamlExtended},
+    Figment, Metadata, Provider,
+};
 use serde::{Deserialize, Serialize};
+use std::{
+    net::{Ipv4Addr, SocketAddr, SocketAddrV4},
+    path::{Path, PathBuf},
+};
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub enum BackendMode {
@@ -36,7 +42,9 @@ impl Provider for MangoChainsawConfig {
         Metadata::named("McConfig")
     }
 
-    fn data(&self) -> Result<figment::value::Map<figment::Profile, figment::value::Dict>, figment::Error> {
+    fn data(
+        &self,
+    ) -> Result<figment::value::Map<figment::Profile, figment::value::Dict>, figment::Error> {
         figment::providers::Serialized::defaults(MangoChainsawConfig::default()).data()
     }
 }

@@ -277,17 +277,22 @@ impl McBucket {
 
     /// Add labels to an existing document
     #[instrument(skip(self), ret)]
-    pub fn add_document_labels(&self, id: Uuid, labels: Vec<Label>) -> Result<(), MangoChainsawError> {
+    pub fn add_document_labels(
+        &self,
+        id: Uuid,
+        labels: Vec<Label>,
+    ) -> Result<(), MangoChainsawError> {
         let idbytes = MangoChainsaw::ser(id.as_u64_pair())?;
         (&self.labels_kev, &self.labels_vek, &self.docs_labels).transaction(
             |(kev, vek, doc_labels)| {
                 // Update the docs_labels tree with the new labels
                 if let Some(raw_labels) = doc_labels.remove(&idbytes)? {
-                    let mut has_labels: Vec<Label> = MangoChainsaw::de(raw_labels).map_err(|e| {
-                        UnabortableTransactionError::Storage(sled::Error::ReportableBug(
-                            e.to_string(),
-                        ))
-                    })?;
+                    let mut has_labels: Vec<Label> =
+                        MangoChainsaw::de(raw_labels).map_err(|e| {
+                            UnabortableTransactionError::Storage(sled::Error::ReportableBug(
+                                e.to_string(),
+                            ))
+                        })?;
                     has_labels.extend(labels.clone());
                     has_labels.sort();
                     has_labels.dedup();
@@ -312,17 +317,22 @@ impl McBucket {
 
     /// Remove labels from a document
     #[instrument(skip(self), ret)]
-    pub fn remove_document_labels(&self, id: Uuid, labels: Vec<Label>) -> Result<(), MangoChainsawError> {
+    pub fn remove_document_labels(
+        &self,
+        id: Uuid,
+        labels: Vec<Label>,
+    ) -> Result<(), MangoChainsawError> {
         let idbytes = MangoChainsaw::ser(id.as_u64_pair())?;
         (&self.labels_kev, &self.labels_vek, &self.docs_labels).transaction(
             |(kev, vek, doc_labels)| {
                 // Update the docs_labels tree with the labels removed
                 if let Some(raw_labels) = doc_labels.remove(&idbytes)? {
-                    let mut has_labels: Vec<Label> = MangoChainsaw::de(raw_labels).map_err(|e| {
-                        UnabortableTransactionError::Storage(sled::Error::ReportableBug(
-                            e.to_string(),
-                        ))
-                    })?;
+                    let mut has_labels: Vec<Label> =
+                        MangoChainsaw::de(raw_labels).map_err(|e| {
+                            UnabortableTransactionError::Storage(sled::Error::ReportableBug(
+                                e.to_string(),
+                            ))
+                        })?;
                     has_labels.retain(|l| !labels.contains(l));
                     has_labels.sort();
                     has_labels.dedup();
