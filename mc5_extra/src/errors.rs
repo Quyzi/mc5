@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use mc5_core::errors::McError;
+use mc5_core::errors::MangoChainsawError;
 use serde::{Deserialize, Serialize};
 
 
@@ -15,8 +15,8 @@ impl Display for Mc5Error {
     }
 }
 
-impl From<McError> for Mc5Error {
-    fn from(value: McError) -> Self {
+impl From<MangoChainsawError> for Mc5Error {
+    fn from(value: MangoChainsawError) -> Self {
         Self {
             message: value.to_string(),
         }

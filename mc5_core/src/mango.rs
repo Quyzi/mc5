@@ -1,5 +1,5 @@
 use crate::config::MangoChainsawConfig;
-use crate::{bucket::McBucket, errors::MangoChainsawError};
+use crate::{bucket::MangoChainsawBucket, errors::MangoChainsawError};
 use flexbuffers::FlexbufferSerializer;
 use serde::{de::DeserializeOwned, Serialize};
 use sled::IVec;
@@ -49,8 +49,8 @@ impl MangoChainsaw {
 
     /// Create or open a named bucket
     #[instrument(skip(self), fields(this))]
-    pub fn get_bucket(&self, name: &str) -> Result<McBucket, MangoChainsawError> {
-        let this = McBucket::new(self, name)?;
+    pub fn get_bucket(&self, name: &str) -> Result<MangoChainsawBucket, MangoChainsawError> {
+        let this = MangoChainsawBucket::new(self, name)?;
         debug!("Opened bucket {name}");
         Ok(this)
     }
@@ -79,7 +79,7 @@ impl MangoChainsaw {
     /// Drop a bucket
     #[instrument(skip(self))]
     pub fn drop_bucket(&self, name: &str) -> Result<(), MangoChainsawError> {
-        let b = McBucket::new(self, name)?;
+        let b = MangoChainsawBucket::new(self, name)?;
         b.drop_bucket()?;
         Ok(())
     }

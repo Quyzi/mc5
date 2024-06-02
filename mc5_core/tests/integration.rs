@@ -21,7 +21,7 @@ struct TestFile {
     pub hash: u64,
     pub filename: String,
     pub size: u64,
-    pub _attrs: u32,
+    pub attrs: u32,
     pub path: PathBuf,
     pub filetype: String,
     pub is_code: bool,
@@ -71,7 +71,7 @@ impl TryFrom<DirEntry> for TestFile {
             hash,
             filename,
             size,
-            _attrs: attrs,
+            attrs,
             path,
             filetype,
             is_code,
@@ -86,6 +86,7 @@ impl TestFile {
             "document_size" => &self.size.to_string(),
             "filename" => &self.filename,
             "filetype" => &self.filetype,
+            "attributes" => &self.attrs.to_string(),
             "code_file" => &self.is_code.to_string(),
             "path" => self.path.to_str().unwrap()
         )
@@ -129,6 +130,7 @@ fn build_dataset(backend: MangoChainsaw) -> Result<()> {
         .same_file_system(true)
         .max_depth(10);
 
+    let mut total = 0;
     for entry in wd {
         let entry = entry?;
         let path = entry.path().to_str().unwrap();
@@ -138,8 +140,12 @@ fn build_dataset(backend: MangoChainsaw) -> Result<()> {
         let tf: TestFile = entry.try_into()?;
         let (labels, doc) = (tf.to_labels(), tf.data);
         let id = test_bucket.insert(doc, labels)?;
-        info!(id = id.to_string(), "Inserted Object");
+        
+        info!(id = id.to_string(), "Inserted document {total}");
+        total += 1;
     }
+
+    info!("Inserted {total} documents");
 
     Ok(())
 }

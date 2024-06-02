@@ -8,7 +8,7 @@ use tracing::{error, info, instrument, warn};
 use uuid::Uuid;
 
 #[derive(Clone, Debug)]
-pub struct McBucket {
+pub struct MangoChainsawBucket {
     parent: MangoChainsaw,
     name: String,
 
@@ -18,7 +18,7 @@ pub struct McBucket {
     docs_labels: sled::Tree,
 }
 
-impl McBucket {
+impl MangoChainsawBucket {
     /// Create a new Bucket
     #[instrument(skip(parent))]
     pub fn new(parent: &MangoChainsaw, name: &str) -> Result<Self, MangoChainsawError> {

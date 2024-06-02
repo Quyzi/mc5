@@ -12,7 +12,7 @@ prod:
   data_path: mc5_data/
   backend_mode: Fast
   idgen_interval: 420069
-  compression_factor: 3
+  compression_factor: 2
 
 integration_test:
   listen: 127.0.0.1:1420
