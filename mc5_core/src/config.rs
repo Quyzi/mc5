@@ -3,11 +3,11 @@ use figment::{
     Figment, Metadata, Provider,
 };
 use serde::{Deserialize, Serialize};
-use tracing::info;
 use std::{
     net::{Ipv4Addr, SocketAddr, SocketAddrV4},
     path::{Path, PathBuf},
 };
+use tracing::info;
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub enum BackendMode {
@@ -52,7 +52,11 @@ impl Provider for MangoChainsawConfig {
 
 impl MangoChainsawConfig {
     pub fn load<P: AsRef<Path>>(path: P, profile: &str) -> Result<Self, figment::Error> {
-        info!(path = format!("{:?}", path.as_ref()), profile = profile, "Loading config");
+        info!(
+            path = format!("{:?}", path.as_ref()),
+            profile = profile,
+            "Loading config"
+        );
         Figment::new()
             .merge(YamlExtended::file(path.as_ref()).nested())
             .select(profile)

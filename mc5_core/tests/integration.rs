@@ -6,7 +6,9 @@ use std::{
 };
 
 use anyhow::{anyhow, Result};
-use mc5_core::{config::MangoChainsawConfig, label::Label, mango::MangoChainsaw, mclabel, mclabels};
+use mc5_core::{
+    config::MangoChainsawConfig, label::Label, mango::MangoChainsaw, mclabel, mclabels,
+};
 use memmap2::Mmap;
 use tracing::{error, info, instrument};
 use tracing_subscriber::EnvFilter;
@@ -15,11 +17,11 @@ use walkdir::{DirEntry, WalkDir};
 
 #[derive(Clone, Debug)]
 struct TestFile {
-    pub data: Box<Vec<u8>>,
+    pub data: Vec<u8>,
     pub hash: u64,
     pub filename: String,
     pub size: u64,
-    pub attrs: u32,
+    pub _attrs: u32,
     pub path: PathBuf,
     pub filetype: String,
     pub is_code: bool,
@@ -65,11 +67,11 @@ impl TryFrom<DirEntry> for TestFile {
         }
 
         Ok(Self {
-            data: Box::new(contents),
+            data: contents,
             hash,
             filename,
             size,
-            attrs,
+            _attrs: attrs,
             path,
             filetype,
             is_code,
@@ -122,16 +124,19 @@ fn build_dataset(backend: MangoChainsaw) -> Result<()> {
     let test_bucket = backend.get_bucket("testing")?;
 
     // Walk the repo adding all files into the bucket.
-    let wd = WalkDir::new(path).follow_links(false).same_file_system(true).max_depth(10);
+    let wd = WalkDir::new(path)
+        .follow_links(false)
+        .same_file_system(true)
+        .max_depth(10);
 
     for entry in wd {
         let entry = entry?;
         let path = entry.path().to_str().unwrap();
         if entry.path().is_dir() || path.contains("target\\") || path.contains(".git\\") {
-            continue 
+            continue;
         }
         let tf: TestFile = entry.try_into()?;
-        let (labels, doc) = (tf.to_labels(), *tf.data);
+        let (labels, doc) = (tf.to_labels(), tf.data);
         let id = test_bucket.insert(doc, labels)?;
         info!(id = id.to_string(), "Inserted Object");
     }
@@ -159,10 +164,13 @@ fn check_code_files(backend: MangoChainsaw, ids: Vec<Uuid>) -> Result<()> {
         for label in &labels {
             if label.key() == "path" {
                 path = PathBuf::from_str(label.value())?;
-                break
+                break;
             }
         }
-        info!("document {id} exists at {path:?} exists={:?}", path.exists());
+        info!(
+            "document {id} exists at {path:?} exists={:?}",
+            path.exists()
+        );
         let file = std::fs::File::open(&path)?;
         let mmap = unsafe { Mmap::map(&file)? }.to_vec();
         info!("doc size = {}; mmap size = {}", doc.len(), mmap.len());

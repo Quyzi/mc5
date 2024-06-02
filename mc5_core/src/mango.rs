@@ -18,7 +18,9 @@ impl MangoChainsaw {
     #[instrument]
     pub fn new(config: MangoChainsawConfig) -> Result<Self, MangoChainsawError> {
         debug!("Opening db");
-        Ok(Self { db: config.to_sled_config().open()? })
+        Ok(Self {
+            db: config.to_sled_config().open()?,
+        })
     }
 
     /// Get a named tree from the sled backend
