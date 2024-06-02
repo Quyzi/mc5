@@ -1,4 +1,4 @@
-use crate::{errors::McError, label::Label, mc::Mc};
+use crate::{errors::MangoChainsawError, label::Label, mango::MangoChainsaw};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use sled::transaction::UnabortableTransactionError;
@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 #[derive(Clone, Debug)]
 pub struct McBucket {
-    parent: Mc,
+    parent: MangoChainsaw,
     name: String,
 
     documents: sled::Tree,
@@ -21,7 +21,7 @@ pub struct McBucket {
 impl McBucket {
     /// Create a new Bucket
     #[instrument(skip(parent))]
-    pub fn new(parent: &Mc, name: &str) -> Result<Self, McError> {
+    pub fn new(parent: &MangoChainsaw, name: &str) -> Result<Self, MangoChainsawError> {
         Ok(Self {
             parent: parent.clone(),
             name: name.to_string(),
@@ -39,14 +39,14 @@ impl McBucket {
 
     /// Get a document by id
     #[instrument(skip(self))]
-    pub fn get<T>(&self, id: Uuid) -> Result<Option<T>, McError>
+    pub fn get<T>(&self, id: Uuid) -> Result<Option<T>, MangoChainsawError>
     where
         T: DeserializeOwned,
     {
-        match self.documents.get(Mc::ser(id.as_u64_pair())?) {
+        match self.documents.get(MangoChainsaw::ser(id.as_u64_pair())?) {
             Ok(Some(thing)) => {
                 info!("Found object");
-                let out: T = Mc::de(thing)?;
+                let out: T = MangoChainsaw::de(thing)?;
                 info!("Deserialized object");
                 Ok(Some(out))
             }
@@ -63,7 +63,7 @@ impl McBucket {
 
     /// Get many documents by id
     #[instrument(skip(self))]
-    pub fn get_many<T>(&self, ids: Vec<Uuid>) -> Result<Vec<(Uuid, Option<T>)>, McError>
+    pub fn get_many<T>(&self, ids: Vec<Uuid>) -> Result<Vec<(Uuid, Option<T>)>, MangoChainsawError>
     where
         T: DeserializeOwned,
     {
@@ -76,10 +76,10 @@ impl McBucket {
 
     /// Get labels for a given document id
     #[instrument(skip(self))]
-    pub fn get_document_labels(&self, id: Uuid) -> Result<Option<Vec<Label>>, McError> {
-        match self.docs_labels.get(Mc::ser(id.as_u64_pair())?) {
+    pub fn get_document_labels(&self, id: Uuid) -> Result<Option<Vec<Label>>, MangoChainsawError> {
+        match self.docs_labels.get(MangoChainsaw::ser(id.as_u64_pair())?) {
             Ok(Some(thing)) => {
-                let labels: Vec<Label> = Mc::de(thing)?;
+                let labels: Vec<Label> = MangoChainsaw::de(thing)?;
                 info!("Found {} labels for document", labels.len());
                 Ok(Some(labels))
             }
@@ -96,16 +96,16 @@ impl McBucket {
 
     /// Insert a new document with a given set of identifying labels
     #[instrument(skip(self, doc), fields(id))]
-    pub fn insert<T>(&self, doc: T, labels: Vec<Label>) -> Result<Uuid, McError>
+    pub fn insert<T>(&self, doc: T, labels: Vec<Label>) -> Result<Uuid, MangoChainsawError>
     where
         T: Serialize,
     {
         let id = self.parent.next_id()?;
-        let id_ivec = Mc::ser(id.as_u64_pair())?;
+        let id_ivec = MangoChainsaw::ser(id.as_u64_pair())?;
         info!(id = id.to_string(), "Preparing document");
 
-        let document = (id_ivec.clone(), Mc::ser(&doc)?);
-        let doclbl = (id_ivec.clone(), Mc::ser(&labels)?);
+        let document = (id_ivec.clone(), MangoChainsaw::ser(&doc)?);
+        let doclbl = (id_ivec.clone(), MangoChainsaw::ser(&labels)?);
 
         let mut all_labels = vec![];
         for label in &labels {
@@ -142,12 +142,12 @@ impl McBucket {
 
     /// Delete a document from the bucket
     #[instrument(skip(self))]
-    pub fn delete<T>(&self, id: Uuid) -> Result<Option<T>, McError>
+    pub fn delete<T>(&self, id: Uuid) -> Result<Option<T>, MangoChainsawError>
     where
         T: DeserializeOwned,
     {
         let output: RefCell<Option<T>> = RefCell::new(None);
-        let idb = Mc::ser(id.as_u64_pair())?;
+        let idb = MangoChainsaw::ser(id.as_u64_pair())?;
         (
             &self.documents,
             &self.labels_kev,
@@ -157,7 +157,7 @@ impl McBucket {
             .transaction(|(docs, kev, vek, labels)| {
                 info!("deleting document");
                 if let Some(raw_doc) = docs.remove(&idb)? {
-                    let result: T = Mc::de(raw_doc).map_err(|e| {
+                    let result: T = MangoChainsaw::de(raw_doc).map_err(|e| {
                         UnabortableTransactionError::Storage(sled::Error::ReportableBug(
                             e.to_string(),
                         ))
@@ -166,7 +166,7 @@ impl McBucket {
                 }
                 info!("deleting document labels");
                 if let Some(raw_labels) = labels.remove(&idb)? {
-                    let labels: Vec<Label> = Mc::de(raw_labels).map_err(|e| {
+                    let labels: Vec<Label> = MangoChainsaw::de(raw_labels).map_err(|e| {
                         UnabortableTransactionError::Storage(sled::Error::ReportableBug(
                             e.to_string(),
                         ))
@@ -185,14 +185,14 @@ impl McBucket {
 
     /// Get the ID's for all documents matching all given labels
     #[instrument(skip(self), ret)]
-    pub fn search_inclusive(&self, labels: Vec<Label>) -> Result<Vec<Uuid>, McError> {
+    pub fn search_inclusive(&self, labels: Vec<Label>) -> Result<Vec<Uuid>, MangoChainsawError> {
         let mut results = vec![];
 
         let mut middle = vec![];
         for label in labels {
             match self.labels_kev.get(&label.as_bytes()) {
                 Ok(Some(thing)) => {
-                    let ids: Vec<(u64, u64)> = Mc::de(thing)?;
+                    let ids: Vec<(u64, u64)> = MangoChainsaw::de(thing)?;
                     let ids: Vec<Uuid> = ids
                         .into_iter()
                         .map(|id| Uuid::from_u64_pair(id.0, id.1))
@@ -226,7 +226,7 @@ impl McBucket {
 
     /// Get all labels matching a given key
     #[instrument(skip(self), ret)]
-    pub fn label_name_search(&self, key: &str) -> Result<Vec<Label>, McError> {
+    pub fn label_name_search(&self, key: &str) -> Result<Vec<Label>, MangoChainsawError> {
         let mut results = vec![];
         for result in self.labels_kev.scan_prefix(key) {
             let (key, val) = result?;
@@ -243,7 +243,7 @@ impl McBucket {
 
     /// Get all labels matching a given value
     #[instrument(skip(self), ret)]
-    pub fn label_value_search(&self, value: &str) -> Result<Vec<Label>, McError> {
+    pub fn label_value_search(&self, value: &str) -> Result<Vec<Label>, MangoChainsawError> {
         let mut results = vec![];
         for result in self.labels_vek.scan_prefix(value) {
             let (key, val) = result?;
@@ -261,10 +261,10 @@ impl McBucket {
 
     /// Get all document id's with a given label
     #[instrument(skip(self), ret)]
-    pub fn get_label(&self, label: Label) -> Result<Option<Vec<Uuid>>, McError> {
+    pub fn get_label(&self, label: Label) -> Result<Option<Vec<Uuid>>, MangoChainsawError> {
         match self.labels_kev.get(label.as_bytes())? {
             Some(raw_labels) => {
-                let ids: Vec<(u64, u64)> = Mc::de(raw_labels)?;
+                let ids: Vec<(u64, u64)> = MangoChainsaw::de(raw_labels)?;
                 Ok(Some(
                     ids.into_iter()
                         .map(|id| Uuid::from_u64_pair(id.0, id.1))
@@ -277,13 +277,13 @@ impl McBucket {
 
     /// Add labels to an existing document
     #[instrument(skip(self), ret)]
-    pub fn add_document_labels(&self, id: Uuid, labels: Vec<Label>) -> Result<(), McError> {
-        let idbytes = Mc::ser(id.as_u64_pair())?;
+    pub fn add_document_labels(&self, id: Uuid, labels: Vec<Label>) -> Result<(), MangoChainsawError> {
+        let idbytes = MangoChainsaw::ser(id.as_u64_pair())?;
         (&self.labels_kev, &self.labels_vek, &self.docs_labels).transaction(
             |(kev, vek, doc_labels)| {
                 // Update the docs_labels tree with the new labels
                 if let Some(raw_labels) = doc_labels.remove(&idbytes)? {
-                    let mut has_labels: Vec<Label> = Mc::de(raw_labels).map_err(|e| {
+                    let mut has_labels: Vec<Label> = MangoChainsaw::de(raw_labels).map_err(|e| {
                         UnabortableTransactionError::Storage(sled::Error::ReportableBug(
                             e.to_string(),
                         ))
@@ -291,7 +291,7 @@ impl McBucket {
                     has_labels.extend(labels.clone());
                     has_labels.sort();
                     has_labels.dedup();
-                    let new = Mc::ser(has_labels).map_err(|e| {
+                    let new = MangoChainsaw::ser(has_labels).map_err(|e| {
                         UnabortableTransactionError::Storage(sled::Error::ReportableBug(
                             e.to_string(),
                         ))
@@ -312,13 +312,13 @@ impl McBucket {
 
     /// Remove labels from a document
     #[instrument(skip(self), ret)]
-    pub fn remove_document_labels(&self, id: Uuid, labels: Vec<Label>) -> Result<(), McError> {
-        let idbytes = Mc::ser(id.as_u64_pair())?;
+    pub fn remove_document_labels(&self, id: Uuid, labels: Vec<Label>) -> Result<(), MangoChainsawError> {
+        let idbytes = MangoChainsaw::ser(id.as_u64_pair())?;
         (&self.labels_kev, &self.labels_vek, &self.docs_labels).transaction(
             |(kev, vek, doc_labels)| {
                 // Update the docs_labels tree with the labels removed
                 if let Some(raw_labels) = doc_labels.remove(&idbytes)? {
-                    let mut has_labels: Vec<Label> = Mc::de(raw_labels).map_err(|e| {
+                    let mut has_labels: Vec<Label> = MangoChainsaw::de(raw_labels).map_err(|e| {
                         UnabortableTransactionError::Storage(sled::Error::ReportableBug(
                             e.to_string(),
                         ))
@@ -326,7 +326,7 @@ impl McBucket {
                     has_labels.retain(|l| !labels.contains(l));
                     has_labels.sort();
                     has_labels.dedup();
-                    let new = Mc::ser(has_labels).map_err(|e| {
+                    let new = MangoChainsaw::ser(has_labels).map_err(|e| {
                         UnabortableTransactionError::Storage(sled::Error::ReportableBug(
                             e.to_string(),
                         ))
@@ -357,13 +357,13 @@ impl McBucket {
         match t.get(k) {
             Ok(Some(current)) => {
                 info!("Label already exists, updating references");
-                let mut docs: Vec<(u64, u64)> = Mc::de(current).map_err(|e| {
+                let mut docs: Vec<(u64, u64)> = MangoChainsaw::de(current).map_err(|e| {
                     UnabortableTransactionError::Storage(sled::Error::ReportableBug(e.to_string()))
                 })?;
                 docs.push(id);
                 docs.sort();
                 docs.dedup();
-                let new = Mc::ser(docs).map_err(|e| {
+                let new = MangoChainsaw::ser(docs).map_err(|e| {
                     UnabortableTransactionError::Storage(sled::Error::ReportableBug(e.to_string()))
                 })?;
                 let _ = t.insert(k, new)?;
@@ -371,7 +371,7 @@ impl McBucket {
             }
             Ok(None) => {
                 info!("Label does not exist, creating");
-                let new = Mc::ser(vec![id]).map_err(|e| {
+                let new = MangoChainsaw::ser(vec![id]).map_err(|e| {
                     UnabortableTransactionError::Storage(sled::Error::ReportableBug(e.to_string()))
                 })?;
                 let _ = t.insert(k, new)?;
@@ -397,7 +397,7 @@ impl McBucket {
         match t.get(k) {
             Ok(Some(raw_labels)) => {
                 info!("Found label");
-                let mut ids: Vec<(u64, u64)> = Mc::de(raw_labels).map_err(|e| {
+                let mut ids: Vec<(u64, u64)> = MangoChainsaw::de(raw_labels).map_err(|e| {
                     UnabortableTransactionError::Storage(sled::Error::ReportableBug(e.to_string()))
                 })?;
                 if ids.len() == 1 {
@@ -407,7 +407,7 @@ impl McBucket {
                     ids.retain(|i| i.0 != id.0 && i.1 != id.1);
                     t.insert(
                         k,
-                        Mc::ser(ids).map_err(|e| {
+                        MangoChainsaw::ser(ids).map_err(|e| {
                             UnabortableTransactionError::Storage(sled::Error::ReportableBug(
                                 e.to_string(),
                             ))
@@ -432,7 +432,7 @@ impl McBucket {
     /// Drop this bucket, deleting all of its documents and labels.
     /// This can't be undone.
     #[instrument(skip(self))]
-    pub fn drop_bucket(&self) -> Result<(), McError> {
+    pub fn drop_bucket(&self) -> Result<(), MangoChainsawError> {
         let name = &self.name;
         self.parent.db.drop_tree(format!("{name}::doc"))?;
         self.parent.db.drop_tree(format!("{name}::kev"))?;

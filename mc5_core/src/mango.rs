@@ -1,4 +1,4 @@
-use crate::{bucket::McBucket, errors::McError};
+use crate::{bucket::McBucket, errors::MangoChainsawError};
 use flexbuffers::FlexbufferSerializer;
 use serde::{de::DeserializeOwned, Serialize};
 use sled::{Config, IVec};
@@ -8,15 +8,15 @@ use tracing::instrument;
 use uuid::Uuid;
 
 #[derive(Clone, Debug)]
-pub struct Mc {
+pub struct MangoChainsaw {
     pub(crate) db: sled::Db,
 }
 
-impl Mc {
+impl MangoChainsaw {
     /// Create or open an existing Mc5 from a Config
     #[cfg(not(test))]
     #[instrument]
-    pub fn new(config: Config) -> Result<Self, McError> {
+    pub fn new(config: Config) -> Result<Self, MangoChainsawError> {
         debug!("Opening db");
         Ok(Self { db: config.open()? })
     }
@@ -24,7 +24,7 @@ impl Mc {
     /// Create or open an existing Mc5 from a Config
     #[cfg(test)]
     #[instrument]
-    pub fn new(_config: Config) -> Result<Self, McError> {
+    pub fn new(_config: Config) -> Result<Self, MangoChainsawError> {
         let cfg = sled::Config::new().temporary(true);
         debug!("Opening temporary db");
         Ok(Self { db: cfg.open()? })
@@ -32,14 +32,14 @@ impl Mc {
 
     /// Get a named tree from the sled backend
     #[instrument(skip(self))]
-    pub(crate) fn get_tree(&self, name: &str) -> Result<sled::Tree, McError> {
+    pub(crate) fn get_tree(&self, name: &str) -> Result<sled::Tree, MangoChainsawError> {
         debug!("Opening tree {name}");
         Ok(self.db.open_tree(name)?)
     }
 
     /// Get the next ID from the sled monotonic idgen
     #[instrument(skip(self), fields(node_id))]
-    pub(crate) fn next_id(&self) -> Result<Uuid, McError> {
+    pub(crate) fn next_id(&self) -> Result<Uuid, MangoChainsawError> {
         let node_id = self
             .db
             .generate_id()?
@@ -56,7 +56,7 @@ impl Mc {
 
     /// Create or open a named bucket
     #[instrument(skip(self), fields(this))]
-    pub fn get_bucket(&self, name: &str) -> Result<McBucket, McError> {
+    pub fn get_bucket(&self, name: &str) -> Result<McBucket, MangoChainsawError> {
         let this = McBucket::new(self, name)?;
         debug!("Opened bucket {name}");
         Ok(this)
@@ -64,7 +64,7 @@ impl Mc {
 
     /// List buckets
     #[instrument(skip(self))]
-    pub fn list_buckets(&self) -> Result<Vec<String>, McError> {
+    pub fn list_buckets(&self) -> Result<Vec<String>, MangoChainsawError> {
         let mut results = vec![];
         for raw_name in self.db.tree_names() {
             let name = std::str::from_utf8(&raw_name)?;
@@ -85,7 +85,7 @@ impl Mc {
 
     /// Drop a bucket
     #[instrument(skip(self))]
-    pub fn drop_bucket(&self, name: &str) -> Result<(), McError> {
+    pub fn drop_bucket(&self, name: &str) -> Result<(), MangoChainsawError> {
         let b = McBucket::new(self, name)?;
         b.drop_bucket()?;
         Ok(())
@@ -93,7 +93,7 @@ impl Mc {
 
     /// Serialize a thing to be stored as a document
     #[instrument(skip(o))]
-    pub(crate) fn ser<T>(o: T) -> Result<IVec, McError>
+    pub(crate) fn ser<T>(o: T) -> Result<IVec, MangoChainsawError>
     where
         T: Serialize,
     {
@@ -105,7 +105,7 @@ impl Mc {
 
     /// Deserialize bytes from the backend into a document
     #[instrument(skip(b))]
-    pub(crate) fn de<T>(b: IVec) -> Result<T, McError>
+    pub(crate) fn de<T>(b: IVec) -> Result<T, MangoChainsawError>
     where
         T: DeserializeOwned,
     {
@@ -155,10 +155,10 @@ mod tests {
     }
 
     #[test]
-    fn test_insert_get_scan_delete() -> Result<(), McError> {
+    fn test_insert_get_scan_delete() -> Result<(), MangoChainsawError> {
         init_tracing();
 
-        let db = Mc::new(Config::default())?;
+        let db = MangoChainsaw::new(Config::default())?;
         let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_micros();
         let object = Testobj::new();
         let labels = mclabels!(

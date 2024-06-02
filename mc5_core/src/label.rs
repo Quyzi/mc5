@@ -1,4 +1,4 @@
-use crate::errors::McError;
+use crate::errors::MangoChainsawError;
 use serde::Deserialize;
 use serde::Serialize;
 use std::fmt::Display;
@@ -47,12 +47,12 @@ impl Label {
             .to_vec()
     }
 
-    pub fn from_bytes(s: &[u8]) -> Result<Self, McError> {
+    pub fn from_bytes(s: &[u8]) -> Result<Self, MangoChainsawError> {
         let s = std::str::from_utf8(s)?;
         if let Some((lhs, rhs)) = s.split_once('=') {
             Ok(Self::new(lhs, rhs))
         } else {
-            Err(McError::Etc(format!("invalid label {s}")))
+            Err(MangoChainsawError::Etc(format!("invalid label {s}")))
         }
     }
 }

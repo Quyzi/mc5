@@ -4,7 +4,7 @@ use std::{str::Utf8Error, time::SystemTimeError};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
-pub enum McError {
+pub enum MangoChainsawError {
     #[error("Time travel is illegal: {0}")]
     Time(#[from] SystemTimeError),
 
