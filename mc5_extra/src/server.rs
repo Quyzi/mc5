@@ -1,10 +1,17 @@
-use axum::extract::State;
-use axum::http::{HeaderMap, StatusCode};
-use axum::Router;
-use axum::routing::{get};
+use anyhow::anyhow;
+use axum::body::{Body, Bytes};
+use axum::extract::{Path, Query, Request, State};
+use axum::http::{HeaderMap, Response, StatusCode};
 use axum::response::{IntoResponse, Json};
+use axum::routing::{delete, get};
+use axum::Router;
+use mc5_core::label::Label;
 use mc5_core::mango::MangoChainsaw;
+use mc5_core::mclabel;
+use std::collections::{HashMap, HashSet};
+use std::str::FromStr;
 use tracing::{info, instrument};
+use uuid::Uuid;
 
 #[derive(Clone, Debug)]
 pub struct MangoChainsawServer {}
@@ -13,10 +20,15 @@ impl MangoChainsawServer {
     #[instrument(skip(backend))]
     pub async fn run(backend: MangoChainsaw) -> Result<(), anyhow::Error> {
         let app = Router::new()
-            .route("/hello", get(Self::hello))
             .route("/buckets", get(Self::list_buckets))
-            .with_state(backend)
-        ;
+            .route(
+                "/buckets/:bucket",
+                get(Self::stat_bucket)
+                    .post(Self::insert_document)
+                    .delete(Self::drop_bucket),
+            )
+            .route("/buckets/:bucket/:id", get(Self::get_document))
+            .with_state(backend);
 
         let listener = tokio::net::TcpListener::bind("127.0.0.1:1420").await?;
         axum::serve(listener, app).await?;
@@ -24,34 +36,84 @@ impl MangoChainsawServer {
         Ok(())
     }
 
-    #[instrument()]
-    async fn hello(headers: HeaderMap) -> &'static str {
-        "Hello"
-    }
-
-    #[instrument]
-    async fn hello2(headers: HeaderMap) -> &'static str {
-        "Hi"
+    #[instrument(skip(backend), ret)]
+    async fn list_buckets(
+        headers: HeaderMap,
+        State(backend): State<MangoChainsaw>,
+    ) -> Result<(StatusCode, impl IntoResponse), ServerError> {
+        Ok((StatusCode::OK, Json(backend.list_buckets()?)))
     }
 
     #[instrument(skip(backend))]
-    async fn list_buckets(headers: HeaderMap, State(backend): State<MangoChainsaw>) -> Result<Json<Vec<String>>, ServerError> {
-        Ok(Json(backend.list_buckets()?))
+    async fn drop_bucket(
+        headers: HeaderMap,
+        Path(bucket): axum::extract::Path<String>,
+        State(backend): State<MangoChainsaw>,
+    ) -> Result<(StatusCode, impl IntoResponse), ServerError> {
+        info!("Dropping bucket");
+        backend.drop_bucket(&bucket)?;
+        Ok((StatusCode::OK, bucket))
+    }
+
+    #[instrument(skip(backend), ret)]
+    async fn stat_bucket(
+        headers: HeaderMap,
+        Path(bucket): axum::extract::Path<String>,
+        State(backend): State<MangoChainsaw>,
+    ) -> Result<(StatusCode, impl IntoResponse), ServerError> {
+        let bucket = backend.get_bucket(&bucket)?;
+        Ok((StatusCode::OK, Json(bucket.stat()?)))
+    }
+
+    #[instrument(skip(backend, body))]
+    async fn insert_document(
+        headers: HeaderMap,
+        Path(bucket): Path<String>,
+        State(backend): State<MangoChainsaw>,
+        Query(params): Query<HashMap<String, String>>,
+        body: Bytes,
+    ) -> Result<(StatusCode, impl IntoResponse), ServerError> {
+        let bucket = backend.get_bucket(&bucket)?;
+        let labels = params
+            .into_iter()
+            .map(|(k, v)| mclabel!(&k => &v))
+            .collect();
+        let id = bucket.insert(body.to_vec(), labels)?;
+        Ok((StatusCode::OK, id.as_bytes().to_vec()))
+    }
+
+    #[instrument(skip(backend))]
+    async fn get_document(
+        headers: HeaderMap,
+        Path((bucket, id)): Path<(String, String)>,
+        State(backend): State<MangoChainsaw>,
+    ) -> Result<(StatusCode, impl IntoResponse), ServerError> {
+        let bucket = backend.get_bucket(&bucket)?;
+        let id = Uuid::from_str(&id)?;
+        if let Some(doc) = bucket.get::<Vec<u8>>(id)? {
+            Ok((StatusCode::OK, doc))
+        } else {
+            Ok((StatusCode::NOT_FOUND, vec![]))
+        }
     }
 }
 
-
+#[derive(Debug)]
 struct ServerError(anyhow::Error);
 
 impl IntoResponse for ServerError {
     fn into_response(self) -> axum::response::Response {
-        (StatusCode::INTERNAL_SERVER_ERROR, format!("Whoopsie {}", self.0))
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Whoopsie {}", self.0),
+        )
             .into_response()
     }
 }
 
 impl<E> From<E> for ServerError
-where E: Into<anyhow::Error>
+where
+    E: Into<anyhow::Error>,
 {
     fn from(err: E) -> Self {
         Self(err.into())

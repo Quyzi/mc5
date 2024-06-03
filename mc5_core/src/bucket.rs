@@ -3,7 +3,7 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 use sled::transaction::UnabortableTransactionError;
 use sled::Transactional;
-use std::cell::RefCell;
+use std::{cell::RefCell, collections::HashMap};
 use tracing::{error, info, instrument, warn};
 use uuid::Uuid;
 
@@ -35,6 +35,21 @@ impl MangoChainsawBucket {
     /// Get the current bucket name
     pub fn name(&self) -> &str {
         &self.name
+    }
+
+    #[instrument(skip(self), ret)]
+    pub fn stat(&self) -> Result<HashMap<String, usize>, MangoChainsawError> {
+        let mut map = HashMap::new();
+        map.insert("num_documents", self.documents.len());
+        map.insert("num_labels_kev", self.labels_kev.len());
+        map.insert("num_labels_vec", self.labels_vek.len());
+        map.insert("num_docs_labels", self.docs_labels.len());
+        map.insert("crc32_documents", self.documents.checksum()? as usize);
+        map.insert("crc32_labels_kev", self.labels_kev.checksum()? as usize);
+        map.insert("crc32_labels_vek", self.labels_vek.checksum()? as usize);
+        map.insert("crc32_docs_labels", self.docs_labels.checksum()? as usize);
+
+        Ok(map.into_iter().map(|(k, v)| (format!("{k}"), v)).collect())
     }
 
     /// Get a document by id
@@ -106,7 +121,7 @@ impl MangoChainsawBucket {
 
         let document = (id_ivec.clone(), MangoChainsaw::ser(&doc)?);
         let doclbl = (id_ivec.clone(), MangoChainsaw::ser(&labels)?);
-
+        info!(id = id.to_string(), "Doc size: {}", document.1.len());
         let mut all_labels = vec![];
         for label in &labels {
             all_labels.push((label.as_bytes(), label.as_bytes_rev()));
