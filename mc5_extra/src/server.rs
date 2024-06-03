@@ -28,6 +28,7 @@ impl MangoChainsawServer {
                     .delete(Self::drop_bucket),
             )
             .route("/buckets/:bucket/:id", get(Self::get_document))
+            .route("/query/:bucket", get(Self::find_documents))
             .with_state(backend);
 
         let listener = tokio::net::TcpListener::bind("127.0.0.1:1420").await?;
@@ -95,6 +96,15 @@ impl MangoChainsawServer {
         } else {
             Ok((StatusCode::NOT_FOUND, vec![]))
         }
+    }
+
+    #[instrument(skip(backend), ret)]
+    async fn find_documents(headers: HeaderMap, Path(bucket): Path<String>, State(backend): State<MangoChainsaw>, Query(params): Query<HashMap<String, String>>) -> Result<(StatusCode, impl IntoResponse), ServerError> {
+        let bucket = backend.get_bucket(&bucket)?;
+        let labels: Vec<Label> = params.into_iter().map(|(k, v)| mclabel!(&k => &v)).collect();
+        let ids: Vec<String> = bucket.search_inclusive(labels)?
+            .into_iter().map(|id| id.to_string()).collect();
+        Ok((StatusCode::OK, Json(ids)))
     }
 }
 
